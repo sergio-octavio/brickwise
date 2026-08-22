@@ -9,6 +9,9 @@ const root = process.cwd();
 const nextConfig: NextConfig = {
   turbopack: { root },
   outputFileTracingRoot: root,
+  // Desktop packaging only: desktop/scripts/prepare-server.mjs sets BRICKWISE_DESKTOP=1
+  // to get a self-contained .next/standalone server. Inert for dev, npx and `next start`.
+  output: process.env.BRICKWISE_DESKTOP ? "standalone" : undefined,
 };
 
 export default nextConfig;
