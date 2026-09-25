@@ -4,8 +4,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const ITEMS = [
-  { href: "/favorites", label: "Favoritos + Mapa" },
-  { href: "/", label: "Analizados" },
+  { href: "/", label: "Favoritos + Mapa" },
+  { href: "/pipeline", label: "Pipeline" },
+  { href: "/analizados", label: "Analizados" },
+  { href: "/guia", label: "Guía" },
+  { href: "/settings", label: "Ajustes" },
 ];
 
 export default function Nav() {

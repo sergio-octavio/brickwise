@@ -6,6 +6,9 @@ ventana; dentro corre el mismo servidor de Next.js, ejecutado por un Node.js 24 
 Los datos siguen en `~/.brickwise/brickwise.db` (en Windows, `%USERPROFILE%\.brickwise\`), así que
 la app de escritorio, `npm run dev` y `npx brickwise` comparten la misma base de datos.
 
+> **¿Solo quieres instalarlo y usarlo?** La guía para el usuario final está en
+> [INSTALACION.md](INSTALACION.md). Esto de aquí es cómo se construye.
+
 ## Construir
 
 ```bash
@@ -20,6 +23,8 @@ npm run dist               # las dos
 
 La versión sale del `package.json` de la raíz del proyecto; aquí no hay que tocar nada.
 Para regenerar el icono (y el favicon de la web) a partir de la "B" del navbar: `npm run icon`.
+Para regenerar el logotipo horizontal (icono + nombre): `npm run logo` — ver
+[../public/brand/README.md](../public/brand/README.md).
 
 ## Cómo está montado
 

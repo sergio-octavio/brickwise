@@ -3,8 +3,16 @@
 import { useState } from "react";
 import { fmtAED, fmtPct } from "@/lib/format";
 import { AnalysisRow } from "@/lib/types";
+import {
+  computeReform,
+  defaultReformState,
+  FurnitureType,
+  REFORM_ITEMS,
+  ReformState,
+  SIZE_TOLERANCE,
+} from "@/lib/reform";
 
-const SIZE_TOLERANCE = 0.2;
+
 
 interface Props {
   listingId: string;
@@ -21,31 +29,10 @@ interface Props {
  *
  * Default costs are rough Dubai light-reform figures per sqft; edit them freely.
  */
-const ITEMS = {
-  mobiliario: { label: "Mobiliario", defaults: { comprado: 45, medida: 100 }, weights: { comprado: 0.4, medida: 0.5 } },
-  suelo: { label: "Suelo", perSqft: 55, weight: 0.25 },
-  paredes: { label: "Paredes (pintura y arreglos)", perSqft: 12, weight: 0.2 },
-  techos: { label: "Techos (falso techo e iluminación)", perSqft: 20, weight: 0.1 },
-} as const;
-
-type FurnitureType = "comprado" | "medida";
-
-interface ReformState {
-  mobiliario: { on: boolean; tipo: FurnitureType; cost: number };
-  suelo: { on: boolean; cost: number };
-  paredes: { on: boolean; cost: number };
-  techos: { on: boolean; cost: number };
-}
-
-function defaultState(sizeSqft: number | null): ReformState {
-  const s = sizeSqft ?? 500;
-  return {
-    mobiliario: { on: true, tipo: "comprado", cost: Math.round(s * ITEMS.mobiliario.defaults.comprado) },
-    suelo: { on: true, cost: Math.round(s * ITEMS.suelo.perSqft) },
-    paredes: { on: true, cost: Math.round(s * ITEMS.paredes.perSqft) },
-    techos: { on: false, cost: Math.round(s * ITEMS.techos.perSqft) },
-  };
-}
+// Modelo compartido con la métrica "Reforma" del mapa (src/lib/reform.ts):
+// así la ficha y el pin nunca dan números distintos del mismo piso.
+const ITEMS = REFORM_ITEMS;
+const defaultState = defaultReformState;
 
 const REFORM_HELP =
   "Comparamos los alquileres de pisos de TAMAÑO SIMILAR (±20%) del mismo edificio (24 meses). " +
@@ -88,25 +75,31 @@ export default function ReformScenario({ listingId, price, sizeSqft, analysis }:
     localStorage.setItem(`bw-reform-${listingId}`, JSON.stringify(next));
   };
 
-  const uplift = rent_p75 - median_rent; // full spread captured by a complete reform
-  const weightOf = {
-    mobiliario: state.mobiliario.on ? ITEMS.mobiliario.weights[state.mobiliario.tipo] : 0,
-    suelo: state.suelo.on ? ITEMS.suelo.weight : 0,
-    paredes: state.paredes.on ? ITEMS.paredes.weight : 0,
-    techos: state.techos.on ? ITEMS.techos.weight : 0,
-  };
-  const scope = Math.min(1, weightOf.mobiliario + weightOf.suelo + weightOf.paredes + weightOf.techos);
-  const totalCost =
-    (state.mobiliario.on ? state.mobiliario.cost : 0) +
-    (state.suelo.on ? state.suelo.cost : 0) +
-    (state.paredes.on ? state.paredes.cost : 0) +
-    (state.techos.on ? state.techos.cost : 0);
+  // Base preferente: rentas por sqft con ventana de 12 meses, reescaladas a
+  // este piso. Evita que el margen venga de mezclar tamaños o de la inflación
+  // de rentas de 24 meses. Sin ella se usa la base absoluta de siempre.
+  const psqftBasis =
+    analysis.rent_psqft_median != null && analysis.rent_psqft_p75 != null && sizeSqft
+      ? {
+          median: analysis.rent_psqft_median * sizeSqft,
+          p75: analysis.rent_psqft_p75 * sizeSqft,
+          p25: (analysis.rent_psqft_p25 ?? analysis.rent_psqft_median) * sizeSqft,
+          n: analysis.rent_psqft_n,
+          months: analysis.rent_basis_months,
+        }
+      : null;
+  const baseMedian = psqftBasis?.median ?? median_rent;
+  const baseP75 = psqftBasis?.p75 ?? rent_p75;
+  const baseP25 = psqftBasis?.p25 ?? rent_p25;
 
-  const expectedRent = median_rent + uplift * scope;
-  const capturedUplift = expectedRent - median_rent;
-  const postReformYield = expectedRent / (price + totalCost);
-  const paybackYears = capturedUplift > 0 && totalCost > 0 ? totalCost / capturedUplift : null;
-  const spread = (rent_p75 - rent_p25) / median_rent;
+  const uplift = baseP75 - baseMedian; // margen total de una reforma completa
+  const { scope, totalCost, expectedRent, capturedUplift, postReformYield, paybackYears } = computeReform({
+    state,
+    price,
+    medianRent: baseMedian,
+    upliftFull: uplift,
+  });
+  const spread = (baseP75 - baseP25) / baseMedian;
   const medianPct =
     rent_p75 > rent_p25 ? Math.min(96, Math.max(4, ((median_rent - rent_p25) / (rent_p75 - rent_p25)) * 100)) : 50;
 

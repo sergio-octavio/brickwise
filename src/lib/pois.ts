@@ -12,12 +12,14 @@ const OVERPASS_ENDPOINTS = [
 const RADIUS_M = 2000;
 const TTL_MS = 30 * 24 * 3600 * 1000;
 
-export type PoiKind = "gym" | "cafe";
+export type PoiKind = "gym" | "cafe" | "super";
 
 // OSM tag filters + default label per kind.
 const POI = {
   gym: { tag: `["leisure"="fitness_centre"]`, label: "Gym" },
   cafe: { tag: `["amenity"="cafe"]`, label: "Café" },
+  // Súper/mall: atractores de demanda para juzgar la absorción de oferta nueva.
+  super: { tag: `["shop"~"supermarket|mall"]`, label: "Súper/Mall" },
 } as const;
 
 export interface Poi {
@@ -45,6 +47,24 @@ export function poisNear(lat: number, lon: number, kind: PoiKind): Promise<Poi[]
   const task = queue.then(() => doPoisNear(lat, lon, kind));
   queue = task.catch(() => null);
   return task;
+}
+
+/**
+ * Solo caché, sin red: para respuestas que no pueden esperar a Overpass (una
+ * consulta fría tarda >10 s y bloquearía la ficha del anuncio).
+ * undefined = aún no consultado; null nunca se devuelve aquí.
+ */
+export function cachedPoisNear(lat: number, lon: number, kind: PoiKind): Poi[] | undefined {
+  const geoKey = `${lat.toFixed(3)},${lon.toFixed(3)}`;
+  const cached = getDb()
+    .prepare(`SELECT json, fetched_at FROM poi_list_cache WHERE geo_key = ? AND kind = ?`)
+    .get(geoKey, kind) as { json: string; fetched_at: string } | undefined;
+  if (!cached || Date.now() - Date.parse(cached.fetched_at) >= TTL_MS) return undefined;
+  try {
+    return JSON.parse(cached.json);
+  } catch {
+    return undefined;
+  }
 }
 
 /** null = Overpass unavailable (not cached); [] = confirmed none nearby. */

@@ -1,6 +1,6 @@
 {
   "name": "brickwise",
-  "version": "0.1.34",
+  "version": "0.1.44",
   "description": "App local para analizar la rentabilidad de alquiler de inmuebles de Property Finder UAE con el histórico real de transacciones DLD.",
   "license": "MIT",
   "author": "eljommys",
@@ -38,7 +38,8 @@
     "build": "next build --webpack",
     "start": "next start",
     "app": "next build --webpack && next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "release": "npm version patch --no-git-tag-version && npm publish"
   },
   "dependencies": {
     "better-sqlite3": "^12.11.1",

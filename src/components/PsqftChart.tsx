@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { TxRow } from "@/lib/pf/transactions";
+import { psqftTrend } from "@/lib/trend";
 
 interface Props {
   buy: TxRow[];
@@ -86,31 +87,12 @@ export default function PsqftChart({ buy, rent, listingBedrooms, listingSizeSqft
     const tMin = Math.min(...ts);
     const tMax = Math.max(...ts);
 
-    // Least-squares trend over comparable units (fallback to all) — the tendency.
+    // Kernel-weighted moving average over comparable units (fallback to all)
+    // — the same curve the discount badge uses (src/lib/trend.ts).
     const comp = pts.filter((p) => p.comparable);
-    const fitSet = comp.length >= 2 ? comp : pts;
-    let trend: { y0: number; y1: number; annualPct: number | null } | null = null;
-    if (fitSet.length >= 2 && tMax > tMin) {
-      const n = fitSet.length;
-      const mt = fitSet.reduce((s, p) => s + p.t, 0) / n;
-      const my = fitSet.reduce((s, p) => s + p.y, 0) / n;
-      let num = 0;
-      let den = 0;
-      for (const p of fitSet) {
-        num += (p.t - mt) * (p.y - my);
-        den += (p.t - mt) ** 2;
-      }
-      const slope = den ? num / den : 0; // AED/sqft per ms
-      const intercept = my - slope * mt;
-      const YEAR = 365.25 * 24 * 3600 * 1000;
-      trend = {
-        y0: intercept + slope * tMin,
-        y1: intercept + slope * tMax,
-        annualPct: my ? (slope * YEAR) / my : null,
-      };
-    }
+    const trend = psqftTrend(rows, listingSizeSqft, listingBedrooms);
 
-    const extra = [...(refY ? [refY] : []), ...(trend ? [trend.y0, trend.y1] : [])];
+    const extra = [...(refY ? [refY] : []), ...(trend ? trend.curve.map((c) => c.y) : [])];
     let yMin = Math.min(...ys, ...extra);
     let yMax = Math.max(...ys, ...extra);
     const pad = (yMax - yMin) * 0.1 || yMax * 0.1 || 1;
@@ -122,7 +104,7 @@ export default function PsqftChart({ buy, rent, listingBedrooms, listingSizeSqft
     const base = (comp.length ? comp : pts).map((p) => p.y).sort((a, b) => a - b);
     const median = base.length ? base[Math.floor(base.length / 2)] : null;
     return { x, y, tMin, tMax, yMin, yMax, refY, median, trend };
-  }, [pts, mode, listingPsqft]);
+  }, [pts, rows, mode, listingPsqft, listingSizeSqft, listingBedrooms]);
 
   const compCount = pts.filter((p) => p.comparable).length;
 
@@ -214,16 +196,17 @@ export default function PsqftChart({ buy, rent, listingBedrooms, listingSizeSqft
                 </>
               )}
 
-              {/* trend (least-squares) line */}
-              {scales.trend && (
-                <line
-                  x1={scales.x(scales.tMin)}
-                  x2={scales.x(scales.tMax)}
-                  y1={scales.y(scales.trend.y0)}
-                  y2={scales.y(scales.trend.y1)}
+              {/* trend: kernel-weighted moving average curve */}
+              {scales.trend && scales.trend.curve.length >= 2 && (
+                <path
+                  d={scales.trend.curve
+                    .map((c, i) => `${i === 0 ? "M" : "L"}${scales.x(c.t).toFixed(1)},${scales.y(c.y).toFixed(1)}`)
+                    .join(" ")}
+                  fill="none"
                   stroke={TREND}
                   strokeWidth={2.5}
                   strokeLinecap="round"
+                  strokeLinejoin="round"
                 />
               )}
 
@@ -291,8 +274,8 @@ export default function PsqftChart({ buy, rent, listingBedrooms, listingSizeSqft
             {scales.trend && (
               <span className="flex items-center gap-1.5">
                 <span className="inline-block h-0 w-4 border-t-[2.5px]" style={{ borderColor: TREND }} />
-                <span style={{ color: TREND }} className="font-semibold">
-                  Tendencia
+                <span style={{ color: TREND }} className="font-semibold" title="Media móvil ponderada por cercanía en el tiempo: los periodos con más transacciones tiran más de la curva. El %/año compara la curva de hoy con la de hace un año.">
+                  Tendencia (media móvil)
                   {scales.trend.annualPct != null &&
                     ` (${scales.trend.annualPct >= 0 ? "+" : ""}${(scales.trend.annualPct * 100).toFixed(1)} %/año)`}
                 </span>

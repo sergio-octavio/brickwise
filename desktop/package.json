@@ -9,12 +9,13 @@
   "main": "main.js",
   "scripts": {
     "icon": "electron scripts/make-icon.cjs",
+    "logo": "electron scripts/make-logo.cjs",
     "prepare-server": "node scripts/prepare-server.mjs",
     "start": "electron .",
     "pack:dir": "electron-builder --mac --arm64 --dir --publish never",
     "dist:mac": "npm run prepare-server && electron-builder --mac --arm64 --publish never",
     "dist:win": "npm run prepare-server && electron-builder --win --x64 --publish never",
-    "dist": "npm run prepare-server && electron-builder --mac --arm64 --win --x64 --publish never"
+    "dist": "npm run prepare-server && electron-builder --mac --arm64 --publish never && electron-builder --win --x64 --publish never"
   },
   "devDependencies": {
     "electron": "43.4.1",

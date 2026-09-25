@@ -60,11 +60,36 @@ export function computeYield(
   const medianRent = median(rents);
   const medianSalePrice = median(sales);
 
+  // Precio vs mercado, normalizado por sqft. La banda de comparables es ±20 %
+  // de tamaño (hasta 40 % de dispersión), así que la mediana de precios
+  // ABSOLUTOS haría parecer caro a todo piso grande de la banda y barato a
+  // todo pequeño. Se compara AED/sqft contra AED/sqft; si falta la superficie
+  // se cae a la base absoluta y se deja constancia en price_vs_median_basis.
+  const salePsqfts = buySample
+    .filter((t) => t.size_sqft != null && t.size_sqft > 0)
+    .map((t) => t.amount / (t.size_sqft as number));
+  const medianSalePsqft = median(salePsqfts);
+  const askingPsqft = sizeSqft != null && sizeSqft > 0 ? price / sizeSqft : null;
+
+  let priceVsMedian: number | null = null;
+  let basis: "psqft" | "absoluto" | null = null;
+  if (askingPsqft != null && medianSalePsqft != null && medianSalePsqft > 0) {
+    priceVsMedian = askingPsqft / medianSalePsqft - 1;
+    basis = "psqft";
+  } else if (price > 0 && medianSalePrice != null && medianSalePrice > 0) {
+    priceVsMedian = price / medianSalePrice - 1;
+    basis = "absoluto";
+  }
+
   return {
     gross_yield: medianRent != null && medianSalePrice ? medianRent / medianSalePrice : null,
     asking_yield: medianRent != null && price > 0 ? medianRent / price : null,
     median_rent: medianRent,
     median_sale_price: medianSalePrice,
+    median_sale_psqft: medianSalePsqft,
+    sale_psqft_n: salePsqfts.length,
+    price_vs_median: priceVsMedian,
+    price_vs_median_basis: basis,
     // Spread of comparable rents/sales: within one building + size band the location
     // is fixed, so the P25→P75 range mostly reflects interior condition/furnishing.
     rent_p25: percentile(rents, 0.25),
@@ -73,6 +98,51 @@ export function computeYield(
     sale_p75: percentile(sales, 0.75),
     rent_n: rentSample.length,
     buy_n: buySample.length,
+  };
+}
+
+export interface ReformBasis {
+  rent_psqft_p25: number | null;
+  rent_psqft_median: number | null;
+  rent_psqft_p75: number | null;
+  rent_psqft_n: number;
+  rent_basis_months: number | null;
+}
+
+/**
+ * Base de rentas por sqft para el margen de reforma. Se separa de computeYield
+ * a propósito (no mover neta ni CoC) y difiere en dos cosas:
+ *
+ * - Normaliza por sqft: la banda de comparables es ±20 % de tamaño, así que un
+ *   spread en AED absolutos mezcla "más grande" con "mejor reformado".
+ * - Prefiere 12 meses si hay muestra suficiente: con 24 meses en un mercado al
+ *   alza, parte del margen es sólo inflación de rentas, no estado del piso.
+ */
+export function computeReformBasis(
+  rentTxs: TxRow[],
+  bedrooms: number | null,
+  sizeSqft: number | null,
+  minN = 6
+): ReformBasis {
+  const psqftOf = (txs: TxRow[]) =>
+    txs.filter((t) => t.size_sqft != null && t.size_sqft > 0).map((t) => t.amount / (t.size_sqft as number));
+
+  const all = pickSample(rentTxs, bedrooms, sizeSqft);
+  const cutoff12 = Date.now() - WINDOW_MS / 2;
+  const recent = psqftOf(all.filter((t) => Date.parse(t.date) >= cutoff12));
+  const wide = psqftOf(all);
+
+  const use = recent.length >= minN ? recent : wide;
+  const months = recent.length >= minN ? 12 : 24;
+  if (!use.length) {
+    return { rent_psqft_p25: null, rent_psqft_median: null, rent_psqft_p75: null, rent_psqft_n: 0, rent_basis_months: null };
+  }
+  return {
+    rent_psqft_p25: percentile(use, 0.25),
+    rent_psqft_median: median(use),
+    rent_psqft_p75: percentile(use, 0.75),
+    rent_psqft_n: use.length,
+    rent_basis_months: months,
   };
 }
 

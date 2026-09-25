@@ -14,7 +14,16 @@ export default function TransactionsTable({ title, rows, kind }: { title: string
           <table className="w-full text-left text-sm">
             <thead className="sticky top-0 bg-white text-xs text-neutral-500 dark:bg-neutral-900">
               <tr>
-                <th className="py-1.5 pr-3 font-semibold">Fecha</th>
+                <th
+                  className="py-1.5 pr-3 font-semibold"
+                  title={
+                    kind === "rent"
+                      ? "Inicio del contrato (Ejari), no la fecha de firma: Property Finder solo publica el periodo de la tenencia. Por eso hay fechas próximas en el futuro — son contratos ya firmados que empiezan dentro de unas semanas."
+                      : "Fecha de la transacción registrada en el DLD."
+                  }
+                >
+                  {kind === "rent" ? "Inicio contrato" : "Fecha"}
+                </th>
                 <th className="py-1.5 pr-3 font-semibold">{kind === "rent" ? "Renta anual" : "Precio"}</th>
                 <th className="py-1.5 pr-3 font-semibold">Tamaño</th>
                 <th className="py-1.5 pr-3 font-semibold">Hab</th>
